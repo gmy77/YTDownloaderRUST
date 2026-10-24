@@ -1,0 +1,28 @@
+[package]
+name = "ytdownloader-rust"
+version = "0.1.0"
+edition = "2021"
+description = "Scarica video, audio e sottotitoli da YouTube; interfaccia ispirata a YoutubeDownloader di Tyrrrz, motore yt-dlp"
+publish = false
+
+[[bin]]
+name = "ytdownloader-rust"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.31.1", default-features = false, features = ["default_fonts", "glow", "persistence", "accesskit"] }
+egui_extras = { version = "0.31.1", features = ["image", "http"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+ehttp = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rfd = "0.15"
+sha2 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+strip = true
+lto = "thin"

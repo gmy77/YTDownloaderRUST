@@ -1,0 +1,5 @@
+/target/
+*.exe
+*.pdb
+*.zip
+/assets/codepoints.txt
