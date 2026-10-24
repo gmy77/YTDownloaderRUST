@@ -1,0 +1,10 @@
+# Worker che riceve le segnalazioni dell'app e apre le issue su GitHub.
+# Il segreto GITHUB_TOKEN si imposta con: wrangler secret put GITHUB_TOKEN
+name = "ytdr-report"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "RL"
+id = "449b9dc6130b406183421294a3d61e47"

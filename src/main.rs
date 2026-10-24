@@ -388,6 +388,7 @@ enum Event {
     UpdateDone,
     Patch(Patch),
     ToolDownloaded,
+    ReportSent(Result<u64, String>),
 }
 
 struct Snack {
@@ -428,6 +429,7 @@ struct App {
     started: bool,
     sort: Option<(SortCol, bool)>,
     applied_theme: Option<ThemePref>,
+    sending_report: bool,
 }
 
 impl App {
@@ -453,6 +455,7 @@ impl App {
             started: false,
             sort: None,
             applied_theme: None,
+            sending_report: false,
         }
     }
 
@@ -821,6 +824,14 @@ impl App {
                 Event::Message(t, m) => self.message(&t, &m),
                 Event::UpdateDone => self.updating = false,
                 Event::Patch(p) => self.settings.patch = p,
+                Event::ReportSent(r) => {
+                    self.sending_report = false;
+                    let tr = self.tr();
+                    match r {
+                        Ok(n) => self.snack(fmt(tr.report_sent, &[&n.to_string()])),
+                        Err(e) => self.message(tr.error_title, &fmt(tr.report_failed, &[&e])),
+                    }
+                }
                 Event::ToolDownloaded => {
                     self.updating = false;
                     if self.dialog.is_none() {
@@ -1630,6 +1641,16 @@ impl App {
         !close
     }
 
+    fn send_report(&mut self, ctx: &egui::Context, title: String, body: String) {
+        self.sending_report = true;
+        self.snack(self.tr().report_sending);
+        let (tx, ctx2) = (self.tx.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(Event::ReportSent(update::send_report(&title, &body)));
+            ctx2.request_repaint();
+        });
+    }
+
     fn open_report(&mut self, video: Option<&Video>, error: Option<String>) {
         let ytdlp = engine::resolve_ytdlp(&self.settings.ytdlp_path);
         let ytdlp_version = ytdlp.as_deref().and_then(engine::ytdlp_version).unwrap_or_else(|| "?".into());
@@ -1679,25 +1700,34 @@ impl App {
             let w = (ui.available_width() - 32.0) / 3.0;
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 16.0;
-                if outline_button(ui, tr.report_open_github, w, true).clicked() {
-                    let title = report_title(r);
-                    let url = format!(
-                        "https://github.com/{}/issues/new?labels=segnalazione&title={}&body={}",
-                        update::APP_REPO,
-                        url_encode(&title),
-                        url_encode(&truncate_chars(&report_body(r), 6000))
-                    );
-                    open_url(&url);
+                // Invio diretto tramite il Worker: nessun account richiesto.
+                if outline_button(ui, tr.report_send, w, !self.sending_report).clicked() {
+                    self.send_report(ui.ctx(), report_title(r), report_body(r));
                     close = true;
                 }
                 if outline_button(ui, tr.report_copy, w, true).clicked() {
-                    ui.ctx().copy_text(format!("{}\n\n{}", report_title(r), report_body(r)));
+                    ui.ctx().copy_text(format!("{}
+
+{}", report_title(r), report_body(r)));
                     self.snack(tr.copied);
                 }
                 if outline_button(ui, tr.cancel_button, w, true).clicked() {
                     close = true;
                 }
             });
+            ui.add_space(8.0);
+            // Riserva: pagina GitHub già compilata (serve un account).
+            if ui.add(egui::Button::new(RichText::new(tr.report_open_github).size(12.0).color(p.weak)).frame(false)).clicked() {
+                let title = report_title(r);
+                let url = format!(
+                    "https://github.com/{}/issues/new?labels=segnalazione&title={}&body={}",
+                    update::APP_REPO,
+                    url_encode(&title),
+                    url_encode(&truncate_chars(&report_body(r), 6000))
+                );
+                open_url(&url);
+                close = true;
+            }
         });
         !close
     }

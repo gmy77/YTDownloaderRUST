@@ -1,6 +1,6 @@
 [package]
 name = "ytdownloader-rust"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Scarica video, audio e sottotitoli da YouTube; interfaccia ispirata a YoutubeDownloader di Tyrrrz, motore yt-dlp"
 publish = false

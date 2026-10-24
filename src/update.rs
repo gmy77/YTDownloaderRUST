@@ -208,6 +208,30 @@ pub fn safe_args(args: &[String]) -> Vec<String> {
     out
 }
 
+// ------------------------------------------------------------------ segnalazioni
+
+/// Servizio su Cloudflare che trasforma la segnalazione in una issue GitHub
+/// (la chiave GitHub sta lì, non nell'app). Codice in `worker/`.
+const REPORT_URL: &str = "https://ytdr-report.gimmy077.workers.dev/report";
+
+/// Invia una segnalazione; restituisce il numero della issue creata.
+pub fn send_report(title: &str, body: &str) -> Result<u64, String> {
+    let payload = serde_json::json!({ "title": title, "body": body, "version": env!("CARGO_PKG_VERSION") });
+    let mut req = ehttp::Request::post(REPORT_URL, payload.to_string().into_bytes());
+    req.headers.insert("Content-Type", "application/json");
+    req.headers.insert("User-Agent", format!("YTDownloaderRUST/{}", env!("CARGO_PKG_VERSION")));
+    let resp = ehttp::fetch_blocking(&req)?;
+    let v: Value = serde_json::from_slice(&resp.bytes).unwrap_or(Value::Null);
+    if resp.ok {
+        return v.get("number").and_then(Value::as_u64).ok_or_else(|| "risposta non valida".to_string());
+    }
+    Err(match v.get("error").and_then(Value::as_str) {
+        Some("rate_limited" | "daily_limit") => "troppe segnalazioni, riprova più tardi / too many reports, try again later".into(),
+        Some(e) => format!("{e} (HTTP {})", resp.status),
+        None => format!("HTTP {}", resp.status),
+    })
+}
+
 // ------------------------------------------------------------------ app
 
 pub fn is_newer(candidate: &str, current: &str) -> bool {
