@@ -1,59 +1,63 @@
 # YTDownloaderRUST
 
-**Video, audio e sottotitoli da YouTube, tutto in un'unica app.** Versione 0.1.0 · 24 ottobre 2026.
+**English** · [Italiano](README.it.md)
 
-Basta saltare da un sito all'altro, tra pubblicità e finestre che si aprono da sole, per convertire un video in MP3, recuperare i sottotitoli o scaricare una playlist intera: incolli un link o scrivi una ricerca e fai tutto da qui, sul tuo PC, senza limiti e senza registrarti.
+**Video, audio and subtitles from YouTube, all in one app for Windows.** Version 0.1.1 · October 24, 2026.
 
-| Finestra principale | Informazioni |
+No more jumping between ad-filled converter sites and pop-ups to turn a video into an MP3, grab its subtitles or save a whole playlist: paste a link or type a search and do it all from here, on your own PC, with no limits and no sign-up. A single portable `.exe` written in Rust, powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+
+| Main window | About |
 | --- | --- |
-| ![Finestra principale](docs/preview-main.png) | ![Informazioni](docs/preview-about.png) |
+| ![Main window](docs/preview-main.png) | ![About](docs/preview-about.png) |
 
-## Cosa fa
+## Features
 
-- **Video** in MP4 o WebM, da 144p fino alla qualità più alta disponibile (4K e oltre), con tracce audio in altre lingue, sottotitoli, tag e copertina incorporati.
-- **Solo audio** in MP3, M4A, OGG, FLAC (senza perdita) o WAV.
-- **Solo sottotitoli** in SRT, VTT, testo semplice (TXT, comodo come trascrizione) o nel formato originale di YouTube (RAW), in qualsiasi lingua disponibile, compresi quelli automatici e le **traduzioni automatiche** di YouTube.
-- **Playlist, canali e ricerche**: si scelgono i video, il formato, la qualità e la cartella; più download in contemporanea (da 1 a 10).
-- **Sempre aggiornata**: quando YouTube cambia qualcosa, il tasto Aggiorna rimette tutto a posto (vedi sotto).
-- **Segnala un problema** in due clic, con versioni e messaggio d'errore già compilati.
-- Tema scuro, chiaro o di sistema; interfaccia in italiano o in inglese.
+- **Video** in MP4 or WebM, from 144p up to the best quality available (4K and beyond), with extra audio languages, subtitles, tags and cover art embedded.
+- **Audio only** in MP3, M4A, OGG, FLAC (lossless) or WAV.
+- **Subtitles only** in SRT, VTT, plain text (TXT, handy as a transcript) or YouTube's original format (RAW), in any language available, including auto-generated captions and YouTube's **automatic translations**.
+- **Playlists, channels and searches**: pick the videos, format, quality and folder; run 1 to 10 downloads at once.
+- **Keeps working**: when YouTube changes something, the Update button puts things right (see below).
+- **Report a problem** in two clicks, with versions and the error message already filled in. No account needed.
+- Dark, light or system theme; interface in English or Italian.
 
-## Avvio
+## Getting started
 
-Scarica **YTDownloaderRUST.exe** dalla [pagina delle release](https://github.com/gmy77/YTDownloaderRUST/releases/latest), mettilo in una cartella tua (per esempio `Strumenti\YTDownloaderRUST`) e avvialo: è un unico eseguibile, non serve installare nulla.
+Download **YTDownloaderRUST.exe** from the [releases page](https://github.com/gmy77/YTDownloaderRUST/releases/latest), put it in a folder of your own (for example `Tools\YTDownloaderRUST`) and run it: it is a single executable, nothing to install.
 
-Al primo avvio l'app propone di scaricare **yt-dlp** (il motore che dialoga con YouTube) e, se non è già sul PC, **FFmpeg** (serve per unire audio e video e per le conversioni). Entrambi finiscono nella stessa cartella dell'app.
+On first launch the app offers to download **yt-dlp** (the engine that talks to YouTube) and, if it is not already on your PC, **FFmpeg** (used to merge audio and video and for conversions). Both go into the app's folder.
 
-## Come si usa
+> The executable is not code-signed yet, so Windows SmartScreen may show "Windows protected your PC". Click **More info → Run anyway**. You can check the file against `SHA256SUMS.txt` in the release.
 
-Nella casella in alto si può scrivere:
+## How to use it
 
-- un link di YouTube: video, playlist o canale;
-- un ID di video (11 caratteri) o di playlist;
-- un canale come `@nomecanale`;
-- un testo qualsiasi, che diventa una ricerca (o, per forzarla, un testo che inizia con `?`).
+In the box at the top you can type:
 
-**Maiusc+Invio** va a capo e permette di inserire più link o ricerche in una volta sola. Per un video singolo si sceglie il formato in un elenco; per playlist, canali e ricerche si spuntano i video e si scelgono contenitore e qualità. Clic destro sull'elenco dei download per rimuovere quelli completati, riavviare quelli non riusciti o annullare tutto.
+- a YouTube link: video, playlist or channel;
+- a video ID (11 characters) or playlist ID;
+- a channel as `@channelname`;
+- any other text, which becomes a search (start it with `?` to force a search).
 
-## Aggiornamenti
+**Shift+Enter** adds a new line, so you can enter several links or searches at once. For a single video you pick the format from a list; for playlists, channels and searches you tick the videos and choose container and quality. Right-click the download list to clear finished items, retry failed ones or cancel everything.
 
-YouTube cambia spesso il modo in cui fornisce i video, e i programmi come questo smettono di funzionare finché non vengono adattati. YTDownloaderRUST si aggiorna su tre livelli, a ogni avvio (disattivabile) e con il tasto **Aggiorna**:
+## Updates
 
-1. **yt-dlp**: è la parte che si rompe quando YouTube cambia, e i suoi autori la correggono di solito in pochi giorni. L'app ne scarica l'ultima versione ufficiale, verificata con l'hash SHA-256.
-2. **Correzione rapida**: il file [`patch.json`](patch.json) di questo repository può aggiungere opzioni a yt-dlp per aggirare un problema appena scoperto, senza ricompilare l'app. Per sicurezza l'app accetta solo un elenco ristretto di opzioni innocue: niente che esegua comandi o scriva file.
-3. **L'app stessa**: quando esce una nuova release, l'app la scarica, ne verifica l'hash e la installa; è attiva al riavvio.
+YouTube often changes the way it serves videos, and tools like this one stop working until they are adapted. YTDownloaderRUST updates itself on three levels, at every launch (can be turned off) and with the **Update** button:
 
-## Segnalare un problema
+1. **yt-dlp**: this is the part that breaks when YouTube changes, and its authors usually fix it within days. The app downloads the latest official release, verified with its SHA-256 hash.
+2. **Quick fix**: the [`patch.json`](patch.json) file in this repository can add yt-dlp options to work around a newly found problem, without rebuilding the app. For safety the app only accepts a short list of harmless options: nothing that runs commands or writes files.
+3. **The app itself**: when a new release is out, the app downloads it, checks its hash and installs it; it takes effect on restart.
 
-Il pulsante con l'insetto (o clic destro su un download "Non riuscito" → *Segnala questo errore*) prepara una segnalazione con la descrizione, il messaggio d'errore, le versioni di app, yt-dlp e Windows e, se si vuole, il link del video. I percorsi delle cartelle personali vengono tolti. **APRI SU GITHUB** apre la pagina della [issue](https://github.com/gmy77/YTDownloaderRUST/issues) già compilata (serve un account GitHub gratuito); **COPIA** la mette negli appunti per inviarla in altro modo.
+## Reporting a problem
 
-## Autenticazione
+The bug button (or right-click a "Failed" download → *Report this error*) prepares a report with your description, the error message, the versions of the app, yt-dlp and Windows and, if you want, the video link. Personal folder paths are removed. **SEND** delivers it directly, no account needed: it becomes a [public issue](https://github.com/gmy77/YTDownloaderRUST/issues) on this project. **COPY** puts it on the clipboard so you can send it another way.
 
-Alcuni video (con limiti di età, riservati agli abbonati, privati) richiedono l'accesso. Nella finestra *Autenticazione* si può scegliere di usare i cookie di un browser in cui si è già fatto l'accesso a YouTube (Firefox è la scelta più affidabile) oppure un file `cookies.txt`. L'app non copia né conserva i cookie: yt-dlp li legge a ogni richiesta.
+## Authentication
 
-## Compilazione da sorgente
+Some videos (age-restricted, members-only, private) require you to be signed in. In the *Authentication* dialog you can use the cookies of a browser where you are already signed in to YouTube (Firefox is the most reliable choice) or a `cookies.txt` file. The app does not copy or store the cookies: yt-dlp reads them on each request.
 
-Occorrono Windows x64, Rust stabile con target MSVC e i Microsoft C++ Build Tools con Windows SDK.
+## Building from source
+
+You need Windows x64, stable Rust with the MSVC target, and the Microsoft C++ Build Tools with the Windows SDK.
 
 ```powershell
 git clone https://github.com/gmy77/YTDownloaderRUST.git
@@ -61,19 +65,19 @@ cd YTDownloaderRUST
 cargo build --release
 ```
 
-Il risultato è `target\release\ytdownloader-rust.exe`. Le prove: `cargo test --release` (senza rete) e `cargo test --release -- --ignored` (scaricano davvero un video di 19 secondi con lo yt-dlp presente nel PATH).
+The result is `target\release\ytdownloader-rust.exe`. Tests: `cargo test --release` (offline) and `cargo test --release -- --ignored` (actually downloads a 19-second video with the yt-dlp found on the PATH).
 
-- `src/main.rs`: interfaccia, coda dei download, finestre di dialogo.
-- `src/engine.rs`: riconoscimento delle query, scelta dei formati, download con yt-dlp, sottotitoli.
-- `src/update.rs`: aggiornamenti di yt-dlp, dell'app e correzione rapida; download di yt-dlp e FFmpeg.
-- `src/i18n.rs`: testi in inglese e italiano.
+- `src/main.rs`: interface, download queue, dialogs.
+- `src/engine.rs`: query recognition, format selection, downloads with yt-dlp, subtitles.
+- `src/update.rs`: yt-dlp and app updates, quick fix; downloading yt-dlp and FFmpeg.
+- `src/i18n.rs`: English and Italian strings.
 
-## Riconoscimenti e licenze
+## Credits and licenses
 
-Interfaccia e funzionamento sono basati su [**YoutubeDownloader**](https://github.com/Tyrrrz/YoutubeDownloader) di Oleksii Holub (Tyrrrz), licenza MIT: YTDownloaderRUST ne è una riscrittura in Rust con motore yt-dlp e alcune funzioni in più (solo audio in più formati, solo sottotitoli con traduzioni, aggiornamenti e segnalazioni). Non è affiliato a quel progetto né a YouTube/Google.
+The interface and behaviour are based on [**YoutubeDownloader**](https://github.com/Tyrrrz/YoutubeDownloader) by Oleksii Holub (Tyrrrz), MIT license: YTDownloaderRUST is a Rust rewrite with a yt-dlp engine and a few extra features (audio-only in more formats, subtitles-only with translations, self-updates and in-app reports). It is not affiliated with that project or with YouTube/Google.
 
-Motore di download: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (pubblico dominio). Conversioni: [FFmpeg](https://ffmpeg.org). Icone: Material Icons di Google (Apache 2.0). Le librerie incluse nell'eseguibile e le relative licenze sono in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Download engine: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (public domain). Conversions: [FFmpeg](https://ffmpeg.org). Icons: Google Material Icons (Apache 2.0). The libraries bundled in the executable and their licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Il codice di YTDownloaderRUST è distribuito con licenza MIT (vedi [LICENSE](LICENSE)).
+YTDownloaderRUST is released under the MIT license (see [LICENSE](LICENSE)).
 
-**Uso responsabile:** scarica solo contenuti di tua proprietà o che hai il diritto di salvare, nel rispetto del diritto d'autore e dei termini di servizio di YouTube.
+**Use responsibly:** only download content you own or have the right to save, respecting copyright and YouTube's terms of service.
