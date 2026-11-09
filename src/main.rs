@@ -817,8 +817,8 @@ impl App {
 
         // ProgressBar WinUI sotto l'intestazione (visibile solo quando c'è attività).
         egui::TopBottomPanel::top("progress")
-            .exact_height(3.0)
-            .frame(Frame::new().fill(p.window).inner_margin(Margin { left: 16, right: 16, top: 0, bottom: 0 }))
+            .exact_height(18.0)
+            .frame(Frame::new().fill(p.window).inner_margin(Margin { left: 16, right: 16, top: 6, bottom: 0 }))
             .show_separator_line(false)
             .show(ctx, |ui| {
                 let rect = ui.max_rect();

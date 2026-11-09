@@ -644,8 +644,14 @@ pub fn progress_ring(ui: &mut egui::Ui, p: &Pal, fraction: Option<f32>, time: f3
 }
 
 /// ProgressBar WinUI: traccia da 1px, indicatore da 3px arrotondato.
+/// Blu predefinito di Windows (`SystemAccentColor` #0078D4), più chiaro nel tema scuro.
+const PROGRESS_BLUE_LIGHT: u32 = 0x0078D4FF;
+const PROGRESS_BLUE_DARK: u32 = 0x4CC2FFFF;
+const PROGRESS_THICKNESS: f32 = 5.0;
+
 pub fn progress_bar(ui: &egui::Ui, p: &Pal, rect: Rect, fraction: Option<f32>, time: f32) {
     let cy = rect.center().y;
+    let blue = hex(if p.dark { PROGRESS_BLUE_DARK } else { PROGRESS_BLUE_LIGHT });
     ui.painter().hline(rect.x_range(), cy, Stroke::new(1.0_f32, p.strong_stroke));
     let (a, b) = match fraction {
         Some(f) => (rect.left(), rect.left() + rect.width() * f.clamp(0.0, 1.0)),
@@ -656,7 +662,12 @@ pub fn progress_bar(ui: &egui::Ui, p: &Pal, rect: Rect, fraction: Option<f32>, t
         }
     };
     if b > a {
-        ui.painter().rect_filled(Rect::from_min_max(Pos2::new(a, cy - 1.5), Pos2::new(b, cy + 1.5)), 2, p.accent);
+        let half = PROGRESS_THICKNESS / 2.0;
+        let bar = Rect::from_min_max(Pos2::new(a, cy - half), Pos2::new(b, cy + half));
+        // Ombra morbida (bagliore blu) sotto l'indicatore.
+        let shadow = egui::Shadow { offset: [0, 2], blur: 8, spread: 0, color: with_alpha(blue, 0x70) };
+        ui.painter().add(shadow.as_shape(bar, CornerRadius::same(3)));
+        ui.painter().rect_filled(bar, 3, blue);
     }
 }
 
