@@ -4,14 +4,15 @@
 //! (Tyrrrz, licenza MIT); il motore è yt-dlp, lanciato come processo esterno.
 
 mod engine;
+mod fluent;
 mod i18n;
 mod update;
 
-use eframe::egui::{
-    self, text::LayoutJob, Align, Align2, Color32, FontData, FontDefinitions, FontFamily, FontId, Frame, Key, Layout, Margin, RichText, Sense, Shape,
-    Stroke, TextFormat, Vec2,
+use eframe::egui::{self, text::LayoutJob, Align, Align2, FontId, Frame, Key, Layout, Margin, RichText, Sense, Stroke, StrokeKind, TextFormat, Vec2};
+use fluent::{
+    bold, icon, Accent, Ico, Kind, Pal, I_AUTH, I_AUTH_OK, I_BUG, I_CANCEL, I_CHECK, I_CHEVRON_DOWN, I_CHEVRON_UP, I_CLOCK, I_CLOSE, I_EMPTY, I_ERROR, I_FIND,
+    I_FOLDER, I_INFO, I_PERSON, I_PLAY, I_RESTART, I_SEARCH, I_SETTINGS, I_UPDATE,
 };
-use egui_extras::{Column, TableBuilder};
 use engine::{AuthSource, DownloadOption, Preference, QualityPreference, QueryKind, SubKind, SubLanguage, SubSpec, Video};
 use i18n::{fmt, Language, Tr};
 use serde::{Deserialize, Serialize};
@@ -25,37 +26,18 @@ use update::Patch;
 
 const APP_NAME: &str = "YTDownloaderRUST";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const ACCENT: Color32 = Color32::from_rgb(0xF9, 0xA8, 0x25);
-
-// Icone (Material Icons di Google, licenza Apache 2.0).
-const I_SEARCH: &str = "\u{e8b6}";
-const I_ARROW: &str = "\u{e5c8}";
-const I_SETTINGS: &str = "\u{e8b8}";
-const I_AUTH: &str = "\u{f02e}";
-const I_UPDATE: &str = "\u{e923}";
-const I_PERSON: &str = "\u{e7ff}";
-const I_CLOCK: &str = "\u{e8b5}";
-const I_CHECK: &str = "\u{e5ca}";
-const I_CLOSE: &str = "\u{e5cd}";
-const I_FOLDER: &str = "\u{e2c8}";
-const I_PLAY: &str = "\u{e039}";
-const I_CANCEL: &str = "\u{e888}";
-const I_RESTART: &str = "\u{f053}";
-const I_FIND: &str = "\u{e880}";
-const I_YOUTUBE: &str = "\u{f06a}";
-const I_AUTH_OK: &str = "\u{e174}";
-const I_BUG: &str = "\u{e868}";
-const I_INFO: &str = "\u{e88f}";
 
 fn main() -> eframe::Result {
     let icon = image::load_from_memory(include_bytes!("../assets/icon256.png")).map(|i| {
         let i = i.to_rgba8();
         egui::IconData { width: i.width(), height: i.height(), rgba: i.into_raw() }
     });
+    // Finestra trasparente: se Windows lo permette, dietro c'è il materiale Mica.
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(format!("{APP_NAME} v{VERSION}"))
-        .with_inner_size([720.0, 620.0])
-        .with_min_inner_size([600.0, 400.0]);
+        .with_inner_size([760.0, 620.0])
+        .with_min_inner_size([600.0, 400.0])
+        .with_transparent(true);
     if let Ok(icon) = icon {
         viewport = viewport.with_icon(icon);
     }
@@ -120,109 +102,10 @@ impl Default for Settings {
     }
 }
 
-// ---------------------------------------------------------------- colori
+// ---------------------------------------------------------------- testo
 
-struct Pal {
-    header: Color32,
-    card: Color32,
-    body: Color32,
-    divider: Color32,
-    text: Color32,
-    weak: Color32,
-    ok: Color32,
-    warn: Color32,
-    fail: Color32,
-}
-
-/// Colori misurati sull'originale (tema scuro e chiaro).
-fn pal(dark: bool) -> Pal {
-    if dark {
-        Pal {
-            header: Color32::from_gray(0x30),
-            card: Color32::from_gray(0x42),
-            body: Color32::from_gray(0x42),
-            divider: Color32::from_gray(0x59),
-            text: Color32::from_gray(0xEE),
-            weak: Color32::from_gray(0xA8),
-            ok: Color32::from_rgb(144, 238, 144),
-            warn: Color32::from_rgb(255, 165, 0),
-            fail: Color32::from_rgb(255, 69, 0),
-        }
-    } else {
-        Pal {
-            header: Color32::from_gray(0x30),
-            card: Color32::WHITE,
-            body: Color32::WHITE,
-            divider: Color32::from_gray(0xE0),
-            text: Color32::from_gray(0x21),
-            weak: Color32::from_gray(0x75),
-            ok: Color32::from_rgb(0, 100, 0),
-            warn: Color32::from_rgb(255, 140, 0),
-            fail: Color32::from_rgb(139, 0, 0),
-        }
-    }
-}
-
-fn visuals(dark: bool) -> egui::Visuals {
-    let p = pal(dark);
-    let mut v = if dark { egui::Visuals::dark() } else { egui::Visuals::light() };
-    v.panel_fill = p.body;
-    v.window_fill = p.card;
-    v.extreme_bg_color = p.card;
-    v.faint_bg_color = if dark { Color32::from_gray(0x4A) } else { Color32::from_gray(0xF5) };
-    v.override_text_color = Some(p.text);
-    v.hyperlink_color = ACCENT;
-    v.selection.bg_fill = ACCENT.gamma_multiply(0.45);
-    v.selection.stroke = Stroke::new(1.0_f32, ACCENT);
-    v.text_cursor.stroke = Stroke::new(2.0_f32, ACCENT);
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.divider);
-    v
-}
-
-fn setup_fonts(ctx: &egui::Context) {
-    let mut fonts = FontDefinitions::default();
-    let base = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
-    let mut add = |key: &str, file: &str| -> bool {
-        match std::fs::read(format!("C:\\Windows\\Fonts\\{file}")) {
-            Ok(bytes) => {
-                fonts.font_data.insert(key.into(), Arc::new(FontData::from_owned(bytes)));
-                true
-            }
-            Err(_) => false,
-        }
-    };
-    // Segoe UI viene letto dall'installazione di Windows, non è incluso nell'exe.
-    let regular = add("segoe", "segoeui.ttf");
-    let bold = add("segoe_bold", "seguisb.ttf") || add("segoe_bold", "segoeuib.ttf");
-    let light = add("segoe_light", "segoeuil.ttf");
-    fonts.font_data.insert("material".into(), Arc::new(FontData::from_static(include_bytes!("../assets/MaterialIcons-Regular.ttf"))));
-    let with = |first: Option<&str>| -> Vec<String> {
-        let mut v: Vec<String> = first.into_iter().map(str::to_string).collect();
-        if regular {
-            v.push("segoe".into());
-        }
-        v.extend(base.iter().cloned());
-        v
-    };
-    fonts.families.insert(FontFamily::Proportional, with(None));
-    fonts.families.insert(FontFamily::Name("bold".into()), with(bold.then_some("segoe_bold")));
-    fonts.families.insert(FontFamily::Name("light".into()), with(light.then_some("segoe_light")));
-    fonts.families.insert(FontFamily::Name("icons".into()), vec!["material".into()]);
-    ctx.set_fonts(fonts);
-}
-
-fn bold(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("bold".into()))
-}
-fn light(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("light".into()))
-}
-fn icon(code: &str, size: f32, color: Color32) -> RichText {
-    RichText::new(code).family(FontFamily::Name("icons".into())).size(size).color(color)
-}
-
-/// `**grassetto**` → testo con i pezzi in grassetto.
-fn md_job(text: &str, size: f32, color: Color32, base: FontId) -> LayoutJob {
+/// `**grassetto**` → testo con i pezzi in semibold.
+fn md_job(text: &str, size: f32, color: egui::Color32, base: FontId) -> LayoutJob {
     let mut job = LayoutJob::default();
     for (i, part) in text.split("**").enumerate() {
         let font = if i % 2 == 1 { bold(size) } else { FontId::new(size, base.family.clone()) };
@@ -430,14 +313,34 @@ struct App {
     sort: Option<(SortCol, bool)>,
     applied_theme: Option<ThemePref>,
     sending_report: bool,
+    /// Accento scelto dall'utente in Windows.
+    accent: Accent,
+    /// Sfondo Mica attivo (Windows 11 22H2+).
+    mica: bool,
+    hwnd: Option<isize>,
+    applied_dark: Option<bool>,
+}
+
+/// Handle Win32 della finestra (per gli attributi DWM).
+fn window_hwnd(w: &impl raw_window_handle::HasWindowHandle) -> Option<isize> {
+    match w.window_handle().ok()?.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(h) => Some(h.hwnd.get()),
+        _ => None,
+    }
 }
 
 impl App {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        setup_fonts(&cc.egui_ctx);
+        fluent::setup_fonts(&cc.egui_ctx);
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        cc.egui_ctx.set_visuals_of(egui::Theme::Dark, visuals(true));
-        cc.egui_ctx.set_visuals_of(egui::Theme::Light, visuals(false));
+        let accent = Accent::from_system();
+        let hwnd = window_hwnd(cc);
+        // `--no-mica` lascia lo sfondo pieno (per schede video che non gestiscono la trasparenza).
+        let try_mica = !std::env::args().any(|a| a == "--no-mica");
+        let dark = cc.egui_ctx.style().visuals.dark_mode;
+        let mica = hwnd.is_some_and(|h| fluent::apply_window_style(h, dark, try_mica));
+        cc.egui_ctx.set_style_of(egui::Theme::Dark, fluent::style(true, &accent, mica));
+        cc.egui_ctx.set_style_of(egui::Theme::Light, fluent::style(false, &accent, mica));
         let settings: Settings = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
         let (tx, rx) = channel();
         Self {
@@ -456,6 +359,10 @@ impl App {
             sort: None,
             applied_theme: None,
             sending_report: false,
+            accent,
+            mica,
+            hwnd,
+            applied_dark: Some(dark),
         }
     }
 
@@ -848,106 +755,100 @@ impl App {
     fn header(&mut self, ctx: &egui::Context, p: &Pal) {
         let tr = self.tr();
         egui::TopBottomPanel::top("header")
-            .frame(Frame::new().fill(p.header).inner_margin(Margin { left: 12, right: 8, top: 12, bottom: 12 }))
+            .frame(Frame::new().fill(p.window).inner_margin(Margin { left: 16, right: 12, top: 12, bottom: 10 }))
             .show_separator_line(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    let buttons = 5.0 * 44.0;
-                    let card_w = (ui.available_width() - buttons).max(200.0);
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let box_w = (ui.available_width() - 5.0 * 44.0 - 8.0).max(200.0);
                     let enabled = !self.busy;
-                    ui.allocate_ui_with_layout(Vec2::new(card_w, 0.0), Layout::left_to_right(Align::Center), |ui| {
-                        Frame::new()
-                            .fill(p.card)
-                            .corner_radius(4)
-                            .inner_margin(Margin { left: 10, right: 6, top: 8, bottom: 8 })
-                            .shadow(egui::Shadow { offset: [0, 1], blur: 3, spread: 0, color: Color32::from_black_alpha(60) })
-                            .show(ui, |ui| {
-                                ui.set_width(card_w - 16.0);
-                                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
-                                    ui.label(icon(I_SEARCH, 24.0, p.text));
-                                    ui.add_space(4.0);
-                                    // Invio = elabora, Maiusc+Invio = nuova riga (come l'originale).
-                                    let shift = ui.input(|i| i.modifiers.shift);
-                                    let mut submit = false;
-                                    if self.query_focused && !shift && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
-                                        submit = true;
-                                    }
-                                    let edit_w = ui.available_width() - 36.0;
-                                    let resp = ui.add_enabled(
-                                        enabled,
-                                        egui::TextEdit::multiline(&mut self.query)
-                                            .frame(false)
-                                            .desired_rows(1)
-                                            .desired_width(edit_w)
-                                            .margin(Margin::symmetric(0, 2))
-                                            .font(FontId::proportional(16.0))
-                                            .hint_text(RichText::new(tr.query_placeholder).color(p.weak).size(16.0)),
-                                    );
-                                    self.query_focused = resp.has_focus();
-                                    resp.on_hover_text(tr.query_tooltip);
-                                    let can = enabled && !self.query.trim().is_empty();
-                                    let go = ui.add_enabled(can, egui::Button::new(icon(I_ARROW, 24.0, p.weak)).frame(false)).on_hover_text(tr.process_query_tooltip);
-                                    if submit || go.clicked() {
-                                        self.process_query(ui.ctx());
-                                    }
-                                });
-                            });
+                    // Invio = elabora, Maiusc+Invio = nuova riga (come l'originale).
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    let mut submit = false;
+                    if self.query_focused && !shift && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
+                        submit = true;
+                    }
+                    // Casella di ricerca come l'AutoSuggestBox di WinUI: icona di ricerca a destra.
+                    let query = &mut self.query;
+                    let (resp, go) = fluent::text_box(ui, p, enabled, |ui| {
+                        ui.set_width(box_w - 16.0);
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            let resp = ui.add_enabled(
+                                enabled,
+                                egui::TextEdit::multiline(query)
+                                    .frame(false)
+                                    .desired_rows(1)
+                                    .desired_width(ui.available_width() - 32.0)
+                                    .margin(Margin::symmetric(0, 1))
+                                    .hint_text(RichText::new(tr.query_placeholder).color(p.text2)),
+                            );
+                            let can = enabled && !query.trim().is_empty();
+                            let go = fluent::icon_button(ui, p, I_SEARCH, Vec2::new(28.0, 22.0), can).on_hover_text(tr.process_query_tooltip);
+                            (resp, go.clicked())
+                        })
+                        .inner
                     });
-                    let white = Color32::WHITE;
-                    let icon_btn = |ui: &mut egui::Ui, code: &str, tip: &str, on: bool| {
-                        ui.add_enabled(on, egui::Button::new(icon(code, 24.0, white)).frame(false).min_size(Vec2::splat(36.0))).on_hover_text(tip).clicked()
-                    };
-                    if icon_btn(ui, I_INFO, tr.about_tooltip, true) {
+                    self.query_focused = resp.has_focus();
+                    resp.on_hover_text(tr.query_tooltip);
+                    if submit || go {
+                        self.process_query(ui.ctx());
+                    }
+                    ui.add_space(8.0);
+                    // Barra dei comandi: pulsanti "subtle" con sola icona.
+                    let cmd = |ui: &mut egui::Ui, ico: Ico, tip: &str, on: bool| fluent::icon_button(ui, p, ico, Vec2::new(40.0, 36.0), on).on_hover_text(tip).clicked();
+                    if cmd(ui, I_INFO, tr.about_tooltip, true) {
                         self.dialog = Some(Dialog::About);
                     }
-                    if icon_btn(ui, I_BUG, tr.report_tooltip, true) {
+                    if cmd(ui, I_BUG, tr.report_tooltip, true) {
                         self.open_report(None, None);
                     }
-                    if icon_btn(ui, I_UPDATE, tr.update_tooltip, !self.updating) {
+                    if cmd(ui, I_UPDATE, tr.update_tooltip, !self.updating) {
                         self.run_update(ui.ctx(), true);
                     }
-                    if icon_btn(ui, I_AUTH, tr.auth_tooltip, enabled) {
+                    if cmd(ui, I_AUTH, tr.auth_tooltip, enabled) {
                         self.dialog = Some(Dialog::Auth);
                     }
-                    if icon_btn(ui, I_SETTINGS, tr.settings_tooltip, enabled) {
+                    if cmd(ui, I_SETTINGS, tr.settings_tooltip, enabled) {
                         self.dialog = Some(Dialog::Settings);
                     }
                 });
             });
 
-        // Barra di avanzamento da 2 px sotto l'intestazione.
-        egui::TopBottomPanel::top("progress").exact_height(2.0).frame(Frame::new().fill(p.header)).show_separator_line(false).show(ctx, |ui| {
-            let rect = ui.max_rect();
-            let fractions: Vec<f32> = self
-                .downloads
-                .iter()
-                .filter(|d| d.launched && d.status() == Status::Started)
-                .map(|d| d.progress.lock().unwrap().fraction.unwrap_or(0.0))
-                .collect();
-            if self.busy || self.updating {
+        // ProgressBar WinUI sotto l'intestazione (visibile solo quando c'è attività).
+        egui::TopBottomPanel::top("progress")
+            .exact_height(18.0)
+            .frame(Frame::new().fill(p.window).inner_margin(Margin { left: 16, right: 16, top: 6, bottom: 0 }))
+            .show_separator_line(false)
+            .show(ctx, |ui| {
+                let rect = ui.max_rect();
                 let t = ui.input(|i| i.time) as f32;
-                let x = rect.left() + ((t * 0.8).fract() * 1.4 - 0.2) * rect.width();
-                let seg = egui::Rect::from_min_max(egui::pos2(x.max(rect.left()), rect.top()), egui::pos2((x + rect.width() * 0.25).min(rect.right()), rect.bottom()));
-                ui.painter().rect_filled(seg, 0.0, ACCENT);
-                ui.ctx().request_repaint();
-            } else if !fractions.is_empty() {
-                let f = fractions.iter().sum::<f32>() / fractions.len() as f32;
-                let r = egui::Rect::from_min_max(rect.min, egui::pos2(rect.left() + rect.width() * f, rect.bottom()));
-                ui.painter().rect_filled(r, 0.0, ACCENT);
-            }
-        });
+                let fractions: Vec<f32> = self
+                    .downloads
+                    .iter()
+                    .filter(|d| d.launched && d.status() == Status::Started)
+                    .map(|d| d.progress.lock().unwrap().fraction.unwrap_or(0.0))
+                    .collect();
+                if self.busy || self.updating {
+                    fluent::progress_bar(ui, p, rect, None, t);
+                } else if !fractions.is_empty() {
+                    let f = fractions.iter().sum::<f32>() / fractions.len() as f32;
+                    fluent::progress_bar(ui, p, rect, Some(f), t);
+                }
+            });
     }
 
     fn body(&mut self, ctx: &egui::Context, p: &Pal) {
         let tr = self.tr();
-        egui::CentralPanel::default().frame(Frame::new().fill(p.body)).show(ctx, |ui| {
+        egui::CentralPanel::default().frame(Frame::new().fill(p.window).inner_margin(Margin { left: 16, right: 16, top: 10, bottom: 12 })).show(ctx, |ui| {
             if self.downloads.is_empty() {
-                ui.add_space(32.0);
+                ui.add_space((ui.available_height() * 0.22).max(16.0));
                 ui.vertical_centered(|ui| {
-                    ui.label(icon(I_YOUTUBE, 256.0, p.divider));
-                    let mut job = md_job(tr.dashboard_placeholder, 18.0, p.text, light(18.0));
+                    ui.label(icon(I_EMPTY, 64.0, p.text3));
+                    ui.add_space(24.0);
+                    let mut job = md_job(tr.dashboard_placeholder, 18.0, p.text2, FontId::proportional(18.0));
                     job.halign = Align::Center;
-                    job.wrap.max_width = ui.available_width() - 16.0;
+                    job.wrap.max_width = ui.available_width() - 32.0;
                     ui.label(job);
                 });
                 return;
@@ -970,108 +871,129 @@ impl App {
             }
             let mut sort_click: Option<SortCol> = None;
             let time = ui.input(|i| i.time) as f32;
-            Frame::new().inner_margin(Margin { left: 0, right: 28, top: 0, bottom: 0 }).show(ui, |ui| {
-                TableBuilder::new(ui)
-                    .striped(false)
-                    .cell_layout(Layout::left_to_right(Align::Center))
-                    .column(Column::exact(64.0))
-                    .column(Column::remainder().clip(true))
-                    .column(Column::auto().at_least(120.0))
-                    .column(Column::exact(136.0))
-                    .header(30.0, |mut h| {
-                        h.col(|_| {});
-                        for (col, label) in [(SortCol::File, tr.col_file), (SortCol::Status, tr.col_status)] {
-                            h.col(|ui| {
-                                let arrow = match self.sort {
-                                    Some((c, true)) if c == col => " ▲",
-                                    Some((c, false)) if c == col => " ▼",
-                                    _ => "",
-                                };
-                                if ui.add(egui::Label::new(RichText::new(format!("{label}{arrow}")).font(bold(13.0)).color(p.weak)).sense(Sense::click())).clicked() {
-                                    sort_click = Some(col);
-                                }
-                            });
-                        }
-                        h.col(|_| {});
-                    })
-                    .body(|body| {
-                        body.rows(56.0, order.len(), |mut row| {
-                            let i = order[row.index()];
-                            let d = &self.downloads[i];
-                            let (status, error) = {
-                                let s = d.state.lock().unwrap();
-                                (s.status, s.error.clone())
-                            };
-                            row.col(|ui| {
-                                ui.add_space(8.0);
-                                ui.add(egui::Image::new(d.video.thumb_low()).fit_to_exact_size(Vec2::splat(48.0)));
-                            });
-                            row.col(|ui| {
-                                let name = d.file_name();
-                                ui.add(egui::Label::new(RichText::new(&name).size(14.0)).truncate()).on_hover_text(&name);
-                            });
-                            row.col(|ui| {
-                                let (text, color, sense) = match status {
-                                    Status::Enqueued => (tr.status_enqueued.to_string(), p.text.gamma_multiply(0.7), false),
-                                    Status::Started => {
-                                        let pr = d.progress.lock().unwrap();
-                                        circular_progress(ui, if pr.processing { None } else { pr.fraction }, time, p.divider);
-                                        let t = if pr.processing {
-                                            tr.status_processing.to_string()
-                                        } else {
-                                            pr.fraction.map(|f| format!("{:.1}%", f * 100.0)).unwrap_or_default()
-                                        };
-                                        (t, p.text, false)
-                                    }
-                                    Status::Completed => (tr.status_completed.to_string(), p.ok, false),
-                                    Status::Canceled => (tr.status_canceled.to_string(), p.warn, false),
-                                    Status::Failed => (tr.status_failed.to_string(), p.fail, true),
-                                };
-                                let mut label = egui::Label::new(RichText::new(text).color(color)).truncate();
-                                if sense {
-                                    label = label.sense(Sense::click());
-                                }
-                                let r = ui.add(label);
-                                if let Some(e) = error.filter(|_| sense) {
-                                    let r = r.on_hover_ui(|ui| {
-                                        ui.label(RichText::new(tr.click_to_copy_error).font(bold(13.0)));
-                                        ui.add_space(6.0);
-                                        ui.label(e);
-                                    });
-                                    if r.clicked() {
-                                        actions.push(RowAction::CopyError(i));
-                                    }
-                                    r.context_menu(|ui| {
-                                        if ui.button(tr.report_this_error).clicked() {
-                                            actions.push(RowAction::Report(i));
-                                            ui.close_menu();
-                                        }
-                                    });
-                                    r.on_hover_cursor(egui::CursorIcon::PointingHand);
-                                }
-                            });
-                            row.col(|ui| {
-                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    ui.add_space(8.0);
-                                    let btn = |ui: &mut egui::Ui, code: &str, tip: &str| ui.add(egui::Button::new(icon(code, 24.0, p.text)).frame(false)).on_hover_text(tip).clicked();
-                                    if matches!(status, Status::Canceled | Status::Failed) && btn(ui, I_RESTART, tr.restart_download) {
-                                        actions.push(RowAction::Restart(i));
-                                    }
-                                    if matches!(status, Status::Enqueued | Status::Started) && btn(ui, I_CANCEL, tr.cancel_download) {
-                                        actions.push(RowAction::Cancel(i));
-                                    }
-                                    if status == Status::Completed {
-                                        if btn(ui, I_PLAY, tr.play) {
-                                            actions.push(RowAction::Open(i));
-                                        }
-                                        if btn(ui, I_FIND, tr.show_file) {
-                                            actions.push(RowAction::ShowFile(i));
-                                        }
-                                    }
-                                });
-                            });
-                        });
+            // Colonne: [16][miniatura 64][12][nome][12][stato][12][azioni][16]
+            const THUMB: f32 = 64.0;
+            const STATUS_W: f32 = 150.0;
+            const ACTIONS_W: f32 = 76.0;
+            const FIXED: f32 = 16.0 + THUMB + 12.0 + 12.0 + STATUS_W + 12.0 + ACTIONS_W + 16.0;
+            const ROW_H: f32 = 64.0;
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                ui.add_space(16.0 + THUMB + 12.0);
+                let name_w = (ui.available_width() + 16.0 + THUMB + 12.0 - FIXED).max(60.0);
+                for (col, label, w) in [(SortCol::File, tr.col_file, name_w + 12.0), (SortCol::Status, tr.col_status, STATUS_W)] {
+                    let sorted = match self.sort {
+                        Some((c, asc)) if c == col => Some(asc),
+                        _ => None,
+                    };
+                    if column_header(ui, p, label, sorted, w).clicked() {
+                        sort_click = Some(col);
+                    }
+                }
+            });
+            ui.add_space(4.0);
+            ui.spacing_mut().item_spacing.y = 4.0;
+            let (h_body, h_caption) = ui.fonts(|f| (f.row_height(&FontId::proportional(14.0)), f.row_height(&FontId::proportional(12.0))));
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, ROW_H, order.len(), |ui, range| {
+                for k in range {
+                    let i = order[k];
+                    let d = &self.downloads[i];
+                    let (status, error) = {
+                        let s = d.state.lock().unwrap();
+                        (s.status, s.error.clone())
+                    };
+                    // Ogni download è una card WinUI (riga da 64, raggio 4, bordo da 1px).
+                    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::hover());
+                    let hovered = ui.rect_contains_pointer(rect);
+                    ui.painter().rect(rect, 4, if hovered { p.control_hover } else { p.card }, Stroke::new(1.0_f32, p.card_stroke), StrokeKind::Inside);
+                    let mut row = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(Vec2::new(16.0, 0.0))).layout(Layout::left_to_right(Align::Center)));
+                    row.spacing_mut().item_spacing.x = 12.0;
+                    // Miniatura 4:3 di YouTube ritagliata a 16:9 (senza bande nere).
+                    row.add(
+                        egui::Image::new(d.video.thumb_low())
+                            .uv(egui::Rect::from_min_max(egui::pos2(0.0, 0.125), egui::pos2(1.0, 0.875)))
+                            .fit_to_exact_size(Vec2::new(THUMB, 36.0))
+                            .maintain_aspect_ratio(false)
+                            .corner_radius(4),
+                    );
+                    let name_w = (rect.width() - FIXED).max(60.0);
+                    row.allocate_ui_with_layout(Vec2::new(name_w, ROW_H), Layout::top_down(Align::Min), |ui| {
+                        ui.set_width(name_w);
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        ui.add_space(((ROW_H - h_body - h_caption - 2.0) / 2.0).max(0.0));
+                        let name = d.file_name();
+                        ui.add(egui::Label::new(RichText::new(&name)).truncate()).on_hover_text(&name);
+                        let info = match d.video.duration_text() {
+                            Some(t) => format!("{}  ·  {t}", d.video.author),
+                            None => d.video.author.clone(),
+                        };
+                        ui.add(egui::Label::new(RichText::new(info).size(12.0).color(p.text2)).truncate());
                     });
+                    row.allocate_ui_with_layout(Vec2::new(STATUS_W, ROW_H), Layout::left_to_right(Align::Center), |ui| {
+                        ui.set_width(STATUS_W);
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        // Stato: colore di sistema sempre accompagnato da icona e parola.
+                        let (ico, text, color, sense) = match status {
+                            Status::Enqueued => (Some(I_CLOCK), tr.status_enqueued.to_string(), p.text2, false),
+                            Status::Started => {
+                                let pr = d.progress.lock().unwrap();
+                                fluent::progress_ring(ui, p, if pr.processing { None } else { pr.fraction }, time);
+                                let t = if pr.processing {
+                                    tr.status_processing.to_string()
+                                } else {
+                                    pr.fraction.map(|f| format!("{:.1}%", f * 100.0)).unwrap_or_default()
+                                };
+                                (None, t, p.text, false)
+                            }
+                            Status::Completed => (Some(I_CHECK), tr.status_completed.to_string(), p.success, false),
+                            Status::Canceled => (Some(I_CANCEL), tr.status_canceled.to_string(), p.caution, false),
+                            Status::Failed => (Some(I_ERROR), tr.status_failed.to_string(), p.critical, true),
+                        };
+                        if let Some(ico) = ico {
+                            ui.label(icon(ico, 16.0, color));
+                        }
+                        let mut label = egui::Label::new(RichText::new(text).color(color)).truncate();
+                        if sense {
+                            label = label.sense(Sense::click());
+                        }
+                        let r = ui.add(label);
+                        if let Some(e) = error.filter(|_| sense) {
+                            let r = r.on_hover_ui(|ui| {
+                                ui.label(RichText::new(tr.click_to_copy_error).font(bold(13.0)));
+                                ui.add_space(6.0);
+                                ui.label(e);
+                            });
+                            if r.clicked() {
+                                actions.push(RowAction::CopyError(i));
+                            }
+                            r.context_menu(|ui| {
+                                if ui.button(tr.report_this_error).clicked() {
+                                    actions.push(RowAction::Report(i));
+                                    ui.close_menu();
+                                }
+                            });
+                            r.on_hover_cursor(egui::CursorIcon::PointingHand);
+                        }
+                    });
+                    row.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let btn = |ui: &mut egui::Ui, ico: Ico, tip: &str| fluent::icon_button(ui, p, ico, Vec2::splat(32.0), true).on_hover_text(tip).clicked();
+                        if matches!(status, Status::Canceled | Status::Failed) && btn(ui, I_RESTART, tr.restart_download) {
+                            actions.push(RowAction::Restart(i));
+                        }
+                        if matches!(status, Status::Enqueued | Status::Started) && btn(ui, I_CANCEL, tr.cancel_download) {
+                            actions.push(RowAction::Cancel(i));
+                        }
+                        if status == Status::Completed {
+                            if btn(ui, I_PLAY, tr.play) {
+                                actions.push(RowAction::Open(i));
+                            }
+                            if btn(ui, I_FIND, tr.show_file) {
+                                actions.push(RowAction::ShowFile(i));
+                            }
+                        }
+                    });
+                }
             });
             if let Some(col) = sort_click {
                 self.sort = match self.sort {
@@ -1126,7 +1048,8 @@ impl App {
         });
     }
 
-    fn snackbar(&mut self, ctx: &egui::Context) {
+    /// Notifica temporanea in basso, nello stile di un InfoBar/flyout WinUI.
+    fn snackbar(&mut self, ctx: &egui::Context, p: &Pal) {
         let now = Instant::now();
         while self.snacks.front().is_some_and(|s| s.until < now) {
             self.snacks.pop_front();
@@ -1135,17 +1058,24 @@ impl App {
         let (text, action) = (s.text.clone(), s.action);
         let tr = self.tr();
         let mut clicked = false;
-        egui::Area::new(egui::Id::new("snackbar")).anchor(Align2::CENTER_BOTTOM, Vec2::new(0.0, -16.0)).order(egui::Order::Foreground).show(ctx, |ui| {
-            Frame::new().fill(Color32::from_gray(0x32)).corner_radius(4).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
-                ui.set_max_width(520.0);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&text).color(Color32::WHITE));
-                    if let Some(SnackAction::Restart) = action {
-                        ui.add_space(12.0);
-                        clicked = ui.add(egui::Button::new(RichText::new(tr.update_install_now).color(ACCENT).font(bold(14.0))).frame(false)).clicked();
-                    }
+        egui::Area::new(egui::Id::new("snackbar")).anchor(Align2::CENTER_BOTTOM, Vec2::new(0.0, -24.0)).order(egui::Order::Foreground).show(ctx, |ui| {
+            Frame::new()
+                .fill(p.flyout)
+                .stroke(Stroke::new(1.0_f32, p.flyout_stroke))
+                .corner_radius(8)
+                .shadow(ctx.style().visuals.popup_shadow)
+                .inner_margin(Margin::symmetric(16, 12))
+                .show(ui, |ui| {
+                    ui.set_max_width(540.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 12.0;
+                        ui.label(icon(I_INFO, 16.0, p.accent));
+                        ui.label(RichText::new(&text).color(p.text));
+                        if let Some(SnackAction::Restart) = action {
+                            clicked = fluent::button(ui, p, tr.update_install_now, Kind::Accent, 0.0, true).clicked();
+                        }
+                    });
                 });
-            });
         });
         if clicked {
             if let Ok(exe) = std::env::current_exe() {
@@ -1161,18 +1091,20 @@ impl App {
     fn dialogs(&mut self, ctx: &egui::Context, p: &Pal) {
         let Some(mut dialog) = self.dialog.take() else { return };
         let width = match dialog {
-            Dialog::Settings => 380.0,
-            Dialog::Auth => 450.0,
-            Dialog::Message(_) => 420.0,
-            Dialog::Report(_) => 540.0,
+            Dialog::Settings => 440.0,
+            Dialog::Auth => 460.0,
+            Dialog::Message(_) => 440.0,
+            Dialog::Report(_) => 548.0,
             Dialog::About => 520.0,
-            _ => 500.0,
+            _ => 520.0,
         };
         let mut keep = true;
         let mut action: Option<MsgAction> = None;
         let escape = ctx.input(|i| i.key_pressed(Key::Escape));
+        // ContentDialog: velo "smoke", raggio 8, bordo di superficie, ombra profonda.
         egui::Modal::new(egui::Id::new("dialog"))
-            .frame(Frame::new().fill(p.card).corner_radius(4).inner_margin(0))
+            .backdrop_color(p.smoke)
+            .frame(Frame::new().fill(p.base).stroke(Stroke::new(1.0_f32, p.surface_stroke)).corner_radius(8).shadow(ctx.style().visuals.window_shadow).inner_margin(0))
             .show(ctx, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
@@ -1207,8 +1139,9 @@ impl App {
 
     fn single_dialog(&mut self, ui: &mut egui::Ui, p: &Pal, d: &mut SingleDlg) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            let t = ui.add(egui::Label::new(RichText::new(&d.video.title).size(19.0)).truncate().sense(Sense::click())).on_hover_text(&d.video.title);
+        fluent::dialog_body(ui, p, None, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let t = ui.add(egui::Label::new(RichText::new(&d.video.title).font(bold(20.0))).truncate().sense(Sense::click())).on_hover_text(&d.video.title);
             t.context_menu(|ui| {
                 if ui.button(tr.copy).clicked() {
                     ui.ctx().copy_text(d.video.title.clone());
@@ -1216,21 +1149,12 @@ impl App {
                 }
             });
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 3.0;
-                ui.label(icon(I_PERSON, 16.0, p.text));
-                ui.label(RichText::new(&d.video.author).font(light(14.0)));
-                ui.add_space(16.0);
-                ui.label(icon(I_CLOCK, 16.0, p.text));
-                ui.label(RichText::new(d.video.duration_text().unwrap_or_else(|| tr.live.into())).font(light(14.0)));
-            });
-        });
-        divider(ui, p);
-        ui.add(egui::Image::new(d.video.thumb_high()).fit_to_exact_size(Vec2::new(500.0, 281.0)).maintain_aspect_ratio(true));
-        divider(ui, p);
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.label(RichText::new(tr.format).size(12.0).color(p.weak));
-            ui.add_space(4.0);
+            video_meta(ui, p, &d.video.author, d.video.duration_text().unwrap_or_else(|| tr.live.into()), 14.0);
+            ui.add_space(16.0);
+            let w = ui.available_width();
+            ui.add(egui::Image::new(d.video.thumb_high()).fit_to_exact_size(Vec2::new(w, w * 9.0 / 16.0)).maintain_aspect_ratio(true).corner_radius(8));
+            ui.add_space(16.0);
+            field_label(ui, tr.format);
             let label = |o: &DownloadOption| -> (String, String) {
                 if o.is_subtitles() {
                     let extra = match o.container.as_str() {
@@ -1247,25 +1171,20 @@ impl App {
                 }
             };
             let (title, sub) = label(&d.options[d.selected]);
-            egui::ComboBox::from_id_salt("format")
-                .width(468.0)
-                .height(420.0)
-                .selected_text(RichText::new(format!("{title}  ·  {sub}")).font(bold(14.0)))
-                .show_ui(ui, |ui| {
-                    for (i, o) in d.options.iter().enumerate() {
-                        let (a, b) = label(o);
-                        let mut job = LayoutJob::default();
-                        job.append(&a, 0.0, TextFormat { font_id: bold(14.0), color: p.text, ..Default::default() });
-                        job.append(&format!("\n{b}"), 0.0, TextFormat { font_id: light(13.0), color: p.weak, ..Default::default() });
-                        if ui.add(egui::SelectableLabel::new(d.selected == i, job)).clicked() {
-                            d.selected = i;
-                        }
+            fluent::combo(ui, p, "format", w, RichText::new(format!("{title}  ·  {sub}")), |ui| {
+                for (i, o) in d.options.iter().enumerate() {
+                    let (a, b) = label(o);
+                    let mut job = LayoutJob::default();
+                    job.append(&a, 0.0, TextFormat { font_id: FontId::proportional(14.0), color: p.text, ..Default::default() });
+                    job.append(&format!("\n{b}"), 0.0, TextFormat { font_id: FontId::proportional(12.0), color: p.text2, ..Default::default() });
+                    if fluent::choice(ui, p, d.selected == i, job).clicked() {
+                        d.selected = i;
                     }
-                });
+                }
+            });
             if d.options[d.selected].is_subtitles() {
                 ui.add_space(12.0);
-                ui.label(RichText::new(tr.sub_language).size(12.0).color(p.weak));
-                ui.add_space(4.0);
+                field_label(ui, tr.sub_language);
                 let name = |i: usize| -> String {
                     if i == 0 {
                         return tr.sub_all.to_string();
@@ -1277,14 +1196,14 @@ impl App {
                         SubKind::Translated => format!("{} {}", l.name, tr.sub_translated),
                     }
                 };
-                egui::ComboBox::from_id_salt("sublang").width(468.0).height(360.0).selected_text(name(d.sub_lang)).show_ui(ui, |ui| {
+                fluent::combo(ui, p, "sublang", w, name(d.sub_lang), |ui| {
                     for i in 0..=d.sub_langs.len() {
-                        ui.selectable_value(&mut d.sub_lang, i, name(i));
+                        fluent::choice_value(ui, p, &mut d.sub_lang, i, name(i));
                     }
                 });
             }
         });
-        let (ok, cancel) = dialog_buttons(ui, tr.download_button, tr.cancel_button, true);
+        let (ok, cancel) = dialog_buttons(ui, p, tr.download_button, tr.cancel_button, true);
         if cancel {
             return false;
         }
@@ -1325,58 +1244,61 @@ impl App {
 
     fn multiple_dialog(&mut self, ui: &mut egui::Ui, p: &Pal, d: &mut MultipleDlg) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            let t = ui.add(egui::Label::new(RichText::new(&d.title).size(19.0)).truncate().sense(Sense::click()));
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::A)) {
+            let all = d.selected.iter().all(|s| *s);
+            d.selected.iter_mut().for_each(|s| *s = !all);
+        }
+        fluent::dialog_body(ui, p, None, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let t = ui.add(egui::Label::new(RichText::new(&d.title).font(bold(20.0))).truncate().sense(Sense::click()));
             t.context_menu(|ui| {
                 if ui.button(tr.copy).clicked() {
                     ui.ctx().copy_text(d.title.clone());
                     ui.close_menu();
                 }
             });
-        });
-        divider(ui, p);
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::A)) {
-            let all = d.selected.iter().all(|s| *s);
-            d.selected.iter_mut().for_each(|s| *s = !all);
-        }
-        egui::ScrollArea::vertical().max_height(360.0).auto_shrink([false, true]).show(ui, |ui| {
-            for (i, v) in d.videos.iter().enumerate() {
-                let sel = d.selected[i];
-                let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 64.0), Sense::click());
-                if sel {
-                    ui.painter().rect_filled(rect, 0.0, ACCENT.gamma_multiply(0.15));
-                } else if resp.hovered() {
-                    ui.painter().rect_filled(rect, 0.0, p.divider.gamma_multiply(0.4));
-                }
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(Vec2::new(8.0, 8.0))).layout(Layout::left_to_right(Align::Center)));
-                child.add(egui::Image::new(v.thumb_low()).fit_to_exact_size(Vec2::splat(48.0)));
-                child.add_space(8.0);
-                let text_w = child.available_width() - 40.0;
-                child.allocate_ui_with_layout(Vec2::new(text_w, 48.0), Layout::top_down(Align::Min), |ui| {
-                    ui.spacing_mut().item_spacing.y = 6.0;
-                    ui.add(egui::Label::new(RichText::new(&v.title).size(16.0)).truncate().selectable(false)).on_hover_text(&v.title);
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        ui.label(icon(I_PERSON, 16.0, p.text));
-                        ui.add(egui::Label::new(RichText::new(&v.author).font(light(13.0))).truncate().selectable(false));
-                        ui.add_space(8.0);
-                        ui.label(icon(I_CLOCK, 16.0, p.text));
-                        ui.label(RichText::new(v.duration_text().unwrap_or_else(|| tr.live.into())).font(light(13.0)));
+            ui.add_space(12.0);
+            // ListView a selezione multipla: casella a sinistra, fondo "subtle" sulle voci scelte.
+            egui::ScrollArea::vertical().max_height(340.0).auto_shrink([false, true]).show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
+                for (i, v) in d.videos.iter().enumerate() {
+                    let sel = d.selected[i];
+                    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 60.0), Sense::click());
+                    let fill = if resp.is_pointer_button_down_on() {
+                        p.subtle_pressed
+                    } else if sel || resp.hovered() {
+                        p.subtle_hover
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+                    ui.painter().rect_filled(rect, 4, fill);
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect.shrink2(Vec2::new(12.0, 8.0))).layout(Layout::left_to_right(Align::Center)));
+                    child.spacing_mut().item_spacing.x = 12.0;
+                    let (cb, _) = child.allocate_exact_size(Vec2::splat(20.0), Sense::hover());
+                    fluent::check_mark(&child, p, cb, sel);
+                    child.add(
+                        egui::Image::new(v.thumb_low())
+                            .uv(egui::Rect::from_min_max(egui::pos2(0.0, 0.125), egui::pos2(1.0, 0.875)))
+                            .fit_to_exact_size(Vec2::new(64.0, 36.0))
+                            .maintain_aspect_ratio(false)
+                            .corner_radius(4),
+                    );
+                    let text_w = child.available_width();
+                    child.allocate_ui_with_layout(Vec2::new(text_w, 44.0), Layout::top_down(Align::Min), |ui| {
+                        ui.spacing_mut().item_spacing.y = 4.0;
+                        ui.add(egui::Label::new(RichText::new(&v.title)).truncate()).on_hover_text(&v.title);
+                        video_meta(ui, p, &v.author, v.duration_text().unwrap_or_else(|| tr.live.into()), 12.0);
                     });
-                });
-                if sel {
-                    child.label(icon(I_CHECK, 24.0, p.text));
+                    if resp.clicked() {
+                        d.selected[i] = !sel;
+                    }
                 }
-                if resp.clicked() {
-                    d.selected[i] = !sel;
-                }
-            }
-        });
-        divider(ui, p);
-        Frame::new().inner_margin(16).show(ui, |ui| {
+            });
+            ui.add_space(16.0);
             ui.columns(2, |cols| {
-                cols[0].label(RichText::new(tr.container).size(12.0).color(p.weak));
-                cols[0].add_space(4.0);
+                cols[0].spacing_mut().item_spacing.y = 0.0;
+                cols[1].spacing_mut().item_spacing.y = 0.0;
+                field_label(&mut cols[0], tr.container);
                 let cname = |c: &str| -> String {
                     if engine::container_is_subtitles(c) {
                         format!("{c} ({})", tr.subtitles.to_lowercase())
@@ -1386,27 +1308,27 @@ impl App {
                         c.to_string()
                     }
                 };
-                egui::ComboBox::from_id_salt("container").width(cols[0].available_width()).selected_text(cname(&d.container)).show_ui(&mut cols[0], |ui| {
+                let w0 = cols[0].available_width();
+                fluent::combo(&mut cols[0], p, "container", w0, cname(&d.container), |ui| {
                     for c in engine::CONTAINERS {
-                        ui.selectable_value(&mut d.container, c.to_string(), cname(c));
+                        fluent::choice_value(ui, p, &mut d.container, c.to_string(), cname(c));
                     }
                 });
+                let w1 = cols[1].available_width();
                 if engine::container_is_subtitles(&d.container) {
-                    cols[1].label(RichText::new(tr.sub_language).size(12.0).color(p.weak));
-                    cols[1].add_space(4.0);
+                    field_label(&mut cols[1], tr.sub_language);
                     let lname = |code: &str| -> String {
                         MULTI_SUB_LANGS.iter().find(|(c, _)| *c == code).map(|(c, n)| if *c == "all" { tr.sub_all.to_string() } else { n.to_string() }).unwrap_or_else(|| code.to_string())
                     };
-                    egui::ComboBox::from_id_salt("mlang").width(cols[1].available_width()).selected_text(lname(&d.sub_lang)).show_ui(&mut cols[1], |ui| {
+                    fluent::combo(&mut cols[1], p, "mlang", w1, lname(&d.sub_lang), |ui| {
                         for (c, _) in MULTI_SUB_LANGS {
-                            ui.selectable_value(&mut d.sub_lang, c.to_string(), lname(c));
+                            fluent::choice_value(ui, p, &mut d.sub_lang, c.to_string(), lname(c));
                         }
                     });
-                    cols[1].add_space(4.0);
-                    cols[1].checkbox(&mut d.sub_auto, tr.sub_include_auto);
+                    cols[1].add_space(8.0);
+                    fluent::check_box(&mut cols[1], p, &mut d.sub_auto, tr.sub_include_auto);
                 } else {
-                    cols[1].label(RichText::new(tr.video_quality).size(12.0).color(p.weak));
-                    cols[1].add_space(4.0);
+                    field_label(&mut cols[1], tr.video_quality);
                     let audio = engine::container_is_audio_only(&d.container);
                     let qname = |q: QualityPreference| -> String {
                         match q {
@@ -1415,21 +1337,20 @@ impl App {
                             q => format!("≤ {}p", q.max_height().unwrap_or(0)),
                         }
                     };
-                    let w = cols[1].available_width();
                     cols[1].add_enabled_ui(!audio, |ui| {
-                        egui::ComboBox::from_id_salt("quality").width(w).selected_text(qname(d.quality)).show_ui(ui, |ui| {
+                        fluent::combo(ui, p, "quality", w1, qname(d.quality), |ui| {
                             for q in QualityPreference::MENU {
-                                ui.selectable_value(&mut d.quality, q, qname(q));
+                                fluent::choice_value(ui, p, &mut d.quality, q, qname(q));
                             }
                         });
                     });
                 }
             });
-            ui.add_space(6.0);
-            ui.label(RichText::new(tr.select_all_hint).size(11.0).color(p.weak));
+            ui.add_space(12.0);
+            ui.label(RichText::new(tr.select_all_hint).size(12.0).color(p.text2));
         });
         let count = d.selected.iter().filter(|s| **s).count();
-        let (ok, cancel) = dialog_buttons(ui, &format!("{} ({count})", tr.download_button), tr.cancel_button, count > 0);
+        let (ok, cancel) = dialog_buttons(ui, p, &format!("{} ({count})", tr.download_button), tr.cancel_button, count > 0);
         if cancel {
             return false;
         }
@@ -1468,67 +1389,67 @@ impl App {
 
     fn settings_dialog(&mut self, ui: &mut egui::Ui, p: &Pal) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.label(RichText::new(tr.settings_title).font(light(19.0)));
-        });
-        divider(ui, p);
-        egui::ScrollArea::vertical().max_height(440.0).show(ui, |ui| {
-            Frame::new().inner_margin(Margin::symmetric(16, 8)).show(ui, |ui| {
+        let s = &mut self.settings;
+        fluent::dialog_body(ui, p, Some(tr.settings_title), |ui| {
+            egui::ScrollArea::vertical().max_height(440.0).show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 4.0;
-                let s = &mut self.settings;
                 let theme_name = |t: ThemePref| match t {
                     ThemePref::System => tr.theme_system,
                     ThemePref::Light => tr.theme_light,
                     ThemePref::Dark => tr.theme_dark,
                 };
                 setting_row(ui, tr.theme_label, tr.theme_tooltip, |ui| {
-                    egui::ComboBox::from_id_salt("theme").width(160.0).selected_text(theme_name(s.theme)).show_ui(ui, |ui| {
+                    fluent::combo(ui, p, "theme", 170.0, theme_name(s.theme), |ui| {
                         for t in [ThemePref::System, ThemePref::Light, ThemePref::Dark] {
-                            ui.selectable_value(&mut s.theme, t, theme_name(t));
+                            fluent::choice_value(ui, p, &mut s.theme, t, theme_name(t));
                         }
                     });
                 });
                 setting_row(ui, tr.language_label, tr.language_tooltip, |ui| {
-                    egui::ComboBox::from_id_salt("lang").width(160.0).selected_text(s.language.name()).show_ui(ui, |ui| {
+                    fluent::combo(ui, p, "lang", 170.0, s.language.name(), |ui| {
                         for l in Language::ALL {
-                            ui.selectable_value(&mut s.language, l, l.name());
+                            fluent::choice_value(ui, p, &mut s.language, l, l.name());
                         }
                     });
                 });
-                setting_row(ui, tr.auto_update_label, tr.auto_update_tooltip, |ui| toggle(ui, &mut s.auto_update));
-                setting_row(ui, tr.persist_auth_label, tr.persist_auth_tooltip, |ui| toggle(ui, &mut s.persist_auth));
-                path_row(ui, tr.ffmpeg_label, tr.ffmpeg_tooltip, tr, &mut s.ffmpeg_path, "ffmpeg.exe");
-                path_row(ui, tr.ytdlp_label, tr.ytdlp_tooltip, tr, &mut s.ytdlp_path, "yt-dlp.exe");
-                setting_row(ui, tr.inject_langs_label, tr.inject_langs_tooltip, |ui| toggle(ui, &mut s.inject_langs));
-                setting_row(ui, tr.inject_subs_label, tr.inject_subs_tooltip, |ui| toggle(ui, &mut s.inject_subs));
-                setting_row(ui, tr.inject_tags_label, tr.inject_tags_tooltip, |ui| toggle(ui, &mut s.inject_tags));
-                setting_row(ui, tr.skip_existing_label, tr.skip_existing_tooltip, |ui| toggle(ui, &mut s.skip_existing));
+                setting_row(ui, tr.auto_update_label, tr.auto_update_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.auto_update);
+                });
+                setting_row(ui, tr.persist_auth_label, tr.persist_auth_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.persist_auth);
+                });
+                path_row(ui, p, tr.ffmpeg_label, tr.ffmpeg_tooltip, tr, &mut s.ffmpeg_path, "ffmpeg.exe");
+                path_row(ui, p, tr.ytdlp_label, tr.ytdlp_tooltip, tr, &mut s.ytdlp_path, "yt-dlp.exe");
+                setting_row(ui, tr.inject_langs_label, tr.inject_langs_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.inject_langs);
+                });
+                setting_row(ui, tr.inject_subs_label, tr.inject_subs_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.inject_subs);
+                });
+                setting_row(ui, tr.inject_tags_label, tr.inject_tags_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.inject_tags);
+                });
+                setting_row(ui, tr.skip_existing_label, tr.skip_existing_tooltip, |ui| {
+                    fluent::toggle(ui, p, &mut s.skip_existing);
+                });
                 setting_row(ui, tr.template_label, tr.template_tooltip, |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut s.template).desired_width(150.0).font(FontId::proportional(13.0)));
+                    fluent::line_edit(ui, p, &mut s.template, 170.0, None);
                 });
                 setting_row(ui, tr.parallel_label, tr.parallel_tooltip, |ui| {
-                    ui.spacing_mut().slider_width = 150.0;
-                    ui.add(egui::Slider::new(&mut s.parallel, 1..=10).show_value(false));
-                    ui.label(s.parallel.to_string());
+                    ui.label(RichText::new(s.parallel.to_string()).color(p.text2));
+                    fluent::slider(ui, p, &mut s.parallel, 1..=10, 150.0);
                 });
             });
         });
-        divider(ui, p);
-        let mut close = false;
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            close = outline_button(ui, tr.close_button, ui.available_width(), true).clicked();
-        });
+        let close = fluent::dialog_footer(ui, p, &[(tr.close_button, Kind::Standard, true)], 2) == Some(0);
         !close
     }
 
     fn auth_dialog(&mut self, ui: &mut egui::Ui, p: &Pal) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.label(RichText::new(tr.auth_title).font(light(19.0)));
-        });
-        divider(ui, p);
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.set_min_height(320.0);
+        let auth = &mut self.settings.auth;
+        fluent::dialog_body(ui, p, Some(tr.auth_title), |ui| {
+            ui.set_min_height(300.0);
             let source_name = |a: &AuthSource| -> String {
                 match a {
                     AuthSource::None => tr.auth_none.into(),
@@ -1536,109 +1457,104 @@ impl App {
                     AuthSource::CookiesFile(_) => tr.auth_cookies_file.into(),
                 }
             };
-            if self.settings.auth.is_set() && !matches!(&self.settings.auth, AuthSource::CookiesFile(f) if f.is_empty()) {
+            if auth.is_set() && !matches!(&*auth, AuthSource::CookiesFile(f) if f.is_empty()) {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(16.0);
-                    ui.label(icon(I_AUTH_OK, 160.0, p.divider));
-                    ui.add_space(16.0);
-                    ui.label(RichText::new(tr.authenticated_text).font(light(18.0)));
+                    ui.add_space(24.0);
+                    ui.label(icon(I_AUTH_OK, 64.0, p.success));
+                    ui.add_space(20.0);
+                    ui.label(RichText::new(tr.authenticated_text).size(18.0));
                     ui.add_space(4.0);
-                    let detail = match &self.settings.auth {
+                    let detail = match &*auth {
                         AuthSource::CookiesFile(f) => f.clone(),
                         a => source_name(a),
                     };
-                    ui.label(RichText::new(detail).color(p.weak));
-                    ui.add_space(16.0);
-                    if ui.add(egui::Button::new(RichText::new(tr.log_out).color(ACCENT).size(18.0)).frame(false)).clicked() {
-                        self.settings.auth = AuthSource::None;
+                    ui.label(RichText::new(detail).color(p.text2));
+                    ui.add_space(20.0);
+                    if fluent::button(ui, p, tr.log_out, Kind::Standard, 0.0, true).clicked() {
+                        *auth = AuthSource::None;
                     }
                 });
             } else {
-                ui.label(RichText::new(tr.auth_intro).size(14.0));
+                ui.add(egui::Label::new(tr.auth_intro).wrap());
                 ui.add_space(16.0);
-                ui.label(RichText::new(tr.auth_source).size(12.0).color(p.weak));
-                ui.add_space(4.0);
-                let mut choice = self.settings.auth.clone();
-                egui::ComboBox::from_id_salt("auth").width(ui.available_width()).selected_text(source_name(&choice)).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut choice, AuthSource::None, tr.auth_none);
+                field_label(ui, tr.auth_source);
+                let mut choice = auth.clone();
+                let w = ui.available_width();
+                fluent::combo(ui, p, "auth", w, source_name(&choice), |ui| {
+                    fluent::choice_value(ui, p, &mut choice, AuthSource::None, tr.auth_none);
                     for b in engine::BROWSERS {
-                        ui.selectable_value(&mut choice, AuthSource::Browser(b.into()), browser_name(b));
+                        fluent::choice_value(ui, p, &mut choice, AuthSource::Browser(b.into()), browser_name(b));
                     }
                     let file = matches!(choice, AuthSource::CookiesFile(_));
-                    if ui.selectable_label(file, tr.auth_cookies_file).clicked() {
+                    if fluent::choice(ui, p, file, tr.auth_cookies_file).clicked() {
                         choice = AuthSource::CookiesFile(String::new());
                     }
                 });
                 if let AuthSource::CookiesFile(f) = &mut choice {
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        ui.add(egui::TextEdit::singleline(f).desired_width(ui.available_width() - 40.0).hint_text("cookies.txt"));
-                        if ui.add(egui::Button::new(icon(I_FOLDER, 18.0, p.text)).frame(false)).on_hover_text(tr.browse_tooltip).clicked() {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        let w = ui.available_width() - 40.0;
+                        fluent::line_edit(ui, p, f, w, Some("cookies.txt"));
+                        if fluent::icon_button(ui, p, I_FOLDER, Vec2::splat(32.0), true).on_hover_text(tr.browse_tooltip).clicked() {
                             if let Some(path) = rfd::FileDialog::new().add_filter("cookies.txt", &["txt"]).pick_file() {
                                 *f = path.display().to_string();
                             }
                         }
                     });
                 }
-                self.settings.auth = choice;
+                *auth = choice;
                 ui.add_space(16.0);
-                ui.label(RichText::new(tr.auth_browser_note).size(12.0).color(p.weak));
+                ui.add(egui::Label::new(RichText::new(tr.auth_browser_note).size(12.0).color(p.text2)).wrap());
             }
         });
-        divider(ui, p);
-        let mut close = false;
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            close = outline_button(ui, tr.close_button, ui.available_width(), true).clicked();
-        });
+        let close = fluent::dialog_footer(ui, p, &[(tr.close_button, Kind::Standard, true)], 2) == Some(0);
         !close
     }
+
     fn about_dialog(&mut self, ui: &mut egui::Ui, p: &Pal) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
+        fluent::dialog_body(ui, p, None, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 12.0;
                 ui.add(egui::Image::new(egui::include_image!("../assets/icon256.png")).fit_to_exact_size(Vec2::splat(56.0)));
-                ui.add_space(8.0);
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(APP_NAME).font(bold(22.0)));
-                    ui.label(RichText::new(format!("v{VERSION}")).color(p.weak));
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(RichText::new(APP_NAME).font(bold(20.0)));
+                    ui.label(RichText::new(format!("v{VERSION}")).color(p.text2));
                 });
             });
-            ui.add_space(10.0);
-            ui.label(RichText::new(tr.about_tagline).font(bold(15.0)).color(ACCENT));
-        });
-        divider(ui, p);
-        egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-            Frame::new().inner_margin(16).show(ui, |ui| {
-                ui.set_max_width(520.0 - 32.0);
+            ui.add_space(16.0);
+            ui.label(RichText::new(tr.about_tagline).font(bold(14.0)).color(p.accent_text));
+            ui.add_space(12.0);
+            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 8.0;
-                ui.add(egui::Label::new(RichText::new(tr.about_intro).size(14.0)).wrap());
+                ui.add(egui::Label::new(tr.about_intro).wrap());
                 ui.add_space(4.0);
                 for line in tr.about_features.lines() {
                     ui.horizontal_top(|ui| {
-                        ui.label(icon(I_CHECK, 18.0, ACCENT));
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        ui.add_space(2.0);
+                        ui.label(icon(I_CHECK, 14.0, p.accent_text));
                         let job = md_job(line, 14.0, p.text, FontId::proportional(14.0));
                         ui.add(egui::Label::new(job).wrap());
                     });
                 }
                 ui.add_space(6.0);
-                let job = md_job(tr.about_credits, 12.5, p.weak, FontId::proportional(12.5));
+                let job = md_job(tr.about_credits, 12.0, p.text2, FontId::proportional(12.0));
                 ui.add(egui::Label::new(job).wrap());
-                ui.add(egui::Label::new(RichText::new(tr.about_legal).size(12.5).italics().color(p.weak)).wrap());
+                ui.add(egui::Label::new(RichText::new(tr.about_legal).size(12.0).italics().color(p.text2)).wrap());
             });
         });
-        divider(ui, p);
-        let mut close = false;
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            let w = (ui.available_width() - 16.0) / 2.0;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 16.0;
-                if outline_button(ui, tr.about_github, w, true).clicked() {
-                    open_url(&format!("https://github.com/{}", update::APP_REPO));
-                }
-                close = outline_button(ui, tr.close_button, w, true).clicked();
-            });
-        });
-        !close
+        match fluent::dialog_footer(ui, p, &[(tr.about_github, Kind::Standard, true), (tr.close_button, Kind::Standard, true)], 2) {
+            Some(0) => {
+                open_url(&format!("https://github.com/{}", update::APP_REPO));
+                true
+            }
+            Some(_) => false,
+            None => true,
+        }
     }
 
     fn send_report(&mut self, ctx: &egui::Context, title: String, body: String) {
@@ -1674,50 +1590,30 @@ impl App {
 
     fn report_dialog(&mut self, ui: &mut egui::Ui, p: &Pal, r: &mut ReportDlg) -> bool {
         let tr = self.tr();
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.label(RichText::new(tr.report_title).font(light(19.0)));
-        });
-        divider(ui, p);
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 6.0;
-            ui.label(RichText::new(tr.report_describe).size(13.0).color(p.weak));
-            ui.add(egui::TextEdit::multiline(&mut r.description).desired_rows(4).desired_width(f32::INFINITY));
-            if r.video_url.is_some() {
-                ui.checkbox(&mut r.include_url, tr.report_include_url);
-            }
-            ui.add_space(6.0);
-            ui.label(RichText::new(tr.report_preview).size(13.0).color(p.weak));
-            let body = report_body(r);
-            egui::ScrollArea::vertical().max_height(170.0).show(ui, |ui| {
-                ui.add(egui::Label::new(RichText::new(&body).monospace().size(11.5)).wrap());
-            });
-            ui.add_space(6.0);
-            ui.label(RichText::new(tr.report_note).size(11.5).color(p.weak));
-        });
-        divider(ui, p);
         let mut close = false;
-        Frame::new().inner_margin(16).show(ui, |ui| {
-            let w = (ui.available_width() - 32.0) / 3.0;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 16.0;
-                // Invio diretto tramite il Worker: nessun account richiesto.
-                if outline_button(ui, tr.report_send, w, !self.sending_report).clicked() {
-                    self.send_report(ui.ctx(), report_title(r), report_body(r));
-                    close = true;
-                }
-                if outline_button(ui, tr.report_copy, w, true).clicked() {
-                    ui.ctx().copy_text(format!("{}
-
-{}", report_title(r), report_body(r)));
-                    self.snack(tr.copied);
-                }
-                if outline_button(ui, tr.cancel_button, w, true).clicked() {
-                    close = true;
-                }
+        fluent::dialog_body(ui, p, Some(tr.report_title), |ui| {
+            ui.spacing_mut().item_spacing.y = 8.0;
+            ui.label(tr.report_describe);
+            fluent::text_box(ui, p, true, |ui| {
+                let resp = ui.add(egui::TextEdit::multiline(&mut r.description).frame(false).desired_rows(4).desired_width(f32::INFINITY).margin(Margin::ZERO));
+                (resp, ())
             });
-            ui.add_space(8.0);
-            // Riserva: pagina GitHub già compilata (serve un account).
-            if ui.add(egui::Button::new(RichText::new(tr.report_open_github).size(12.0).color(p.weak)).frame(false)).clicked() {
+            if r.video_url.is_some() {
+                fluent::check_box(ui, p, &mut r.include_url, tr.report_include_url);
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new(tr.report_preview).size(12.0).color(p.text2));
+            let body = report_body(r);
+            Frame::new().fill(p.card2).stroke(Stroke::new(1.0_f32, p.card_stroke)).corner_radius(4).inner_margin(8).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.add(egui::Label::new(RichText::new(&body).monospace().size(11.5).color(p.text2)).wrap());
+                });
+            });
+            ui.add(egui::Label::new(RichText::new(tr.report_note).size(12.0).color(p.text2)).wrap());
+            // Riserva: pagina GitHub già compilata (serve un account). HyperlinkButton WinUI.
+            let link = ui.add(egui::Button::new(RichText::new(tr.report_open_github).size(12.0).color(p.accent_text)).frame(false));
+            if link.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 let title = report_title(r);
                 let url = format!(
                     "https://github.com/{}/issues/new?labels=segnalazione&title={}&body={}",
@@ -1729,6 +1625,20 @@ impl App {
                 close = true;
             }
         });
+        // Invio diretto tramite il Worker: nessun account richiesto.
+        let buttons = [(tr.report_send, Kind::Accent, !self.sending_report), (tr.report_copy, Kind::Standard, true), (tr.cancel_button, Kind::Standard, true)];
+        match fluent::dialog_footer(ui, p, &buttons, 3) {
+            Some(0) => {
+                self.send_report(ui.ctx(), report_title(r), report_body(r));
+                close = true;
+            }
+            Some(1) => {
+                ui.ctx().copy_text(format!("{}\n\n{}", report_title(r), report_body(r)));
+                self.snack(tr.copied);
+            }
+            Some(_) => close = true,
+            None => {}
+        }
         !close
     }
 }
@@ -1829,15 +1739,12 @@ fn escape_regex(s: &str) -> String {
 }
 
 fn message_dialog(ui: &mut egui::Ui, p: &Pal, m: &MessageDlg) -> (bool, Option<MsgAction>) {
-    Frame::new().inner_margin(16).show(ui, |ui| {
-        ui.label(RichText::new(&m.title).font(light(19.0)));
-    });
-    Frame::new().inner_margin(Margin { left: 16, right: 16, top: 0, bottom: 8 }).show(ui, |ui| {
-        ui.add(egui::Label::new(RichText::new(&m.text).size(14.0).color(p.text)).wrap());
+    fluent::dialog_body(ui, p, Some(&m.title), |ui| {
+        ui.add(egui::Label::new(RichText::new(&m.text).color(p.text)).wrap());
     });
     match &m.cancel {
         Some(c) => {
-            let (ok, cancel) = dialog_buttons(ui, &m.ok, c, true);
+            let (ok, cancel) = dialog_buttons(ui, p, &m.ok, c, true);
             if ok {
                 (false, Some(m.on_ok))
             } else if cancel {
@@ -1847,64 +1754,70 @@ fn message_dialog(ui: &mut egui::Ui, p: &Pal, m: &MessageDlg) -> (bool, Option<M
             }
         }
         None => {
-            let mut close = false;
-            Frame::new().inner_margin(16).show(ui, |ui| {
-                close = outline_button(ui, &m.ok, ui.available_width(), true).clicked();
-            });
+            let close = fluent::dialog_footer(ui, p, &[(&m.ok, Kind::Accent, true)], 2) == Some(0);
             (!close, close.then_some(m.on_ok))
         }
     }
 }
 
-fn divider(ui: &mut egui::Ui, p: &Pal) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 1.0), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, p.divider);
+/// Pulsante primario (accento) e Annulla, come i due pulsanti di un ContentDialog.
+fn dialog_buttons(ui: &mut egui::Ui, p: &Pal, ok: &str, cancel: &str, ok_enabled: bool) -> (bool, bool) {
+    let clicked = fluent::dialog_footer(ui, p, &[(ok, Kind::Accent, ok_enabled), (cancel, Kind::Standard, true)], 2);
+    let enter = ok_enabled && ui.input(|i| i.key_pressed(Key::Enter));
+    (clicked == Some(0) || enter, clicked == Some(1))
 }
 
-fn outline_button(ui: &mut egui::Ui, text: &str, width: f32, enabled: bool) -> egui::Response {
-    ui.add_enabled(
-        enabled,
-        egui::Button::new(RichText::new(text).color(ACCENT).font(bold(14.0)))
-            .fill(Color32::TRANSPARENT)
-            .stroke(Stroke::new(1.0_f32, ACCENT))
-            .corner_radius(4)
-            .min_size(Vec2::new(width, 36.0)),
-    )
+/// Intestazione di un campo (Header di ComboBox/TextBox WinUI).
+fn field_label(ui: &mut egui::Ui, text: &str) {
+    ui.label(text);
+    ui.add_space(8.0);
 }
 
-/// Due pulsanti affiancati (come la UniformGrid dell'originale).
-fn dialog_buttons(ui: &mut egui::Ui, ok: &str, cancel: &str, ok_enabled: bool) -> (bool, bool) {
-    let mut res = (false, false);
-    Frame::new().inner_margin(16).show(ui, |ui| {
-        let w = (ui.available_width() - 16.0) / 2.0;
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 16.0;
-            res.0 = outline_button(ui, ok, w, ok_enabled).clicked();
-            res.1 = outline_button(ui, cancel, w, true).clicked();
-        });
-        if ok_enabled && ui.input(|i| i.key_pressed(Key::Enter)) {
-            res.0 = true;
-        }
+/// Autore e durata con le icone Fluent.
+fn video_meta(ui: &mut egui::Ui, p: &Pal, author: &str, duration: String, size: f32) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(icon(I_PERSON, size, p.text2));
+        ui.add(egui::Label::new(RichText::new(author).size(size).color(p.text2)).truncate());
+        ui.add_space(10.0);
+        ui.label(icon(I_CLOCK, size, p.text2));
+        ui.label(RichText::new(duration).size(size).color(p.text2));
     });
-    res
+}
+
+/// Intestazione di colonna cliccabile (ordina), con chevron Fluent.
+fn column_header(ui: &mut egui::Ui, p: &Pal, label: &str, sorted: Option<bool>, width: f32) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 24.0), Sense::click());
+    let color = if resp.hovered() { p.text } else { p.text2 };
+    let g = egui::WidgetText::from(RichText::new(label).size(12.0)).into_galley(ui, Some(egui::TextWrapMode::Truncate), (width - 20.0).max(10.0), egui::TextStyle::Body);
+    let text_w = g.size().x;
+    ui.painter().galley(egui::pos2(rect.left(), rect.center().y - g.size().y / 2.0), g, color);
+    if let Some(asc) = sorted {
+        let ig = egui::WidgetText::from(icon(if asc { I_CHEVRON_UP } else { I_CHEVRON_DOWN }, 10.0, color)).into_galley(ui, None, f32::INFINITY, egui::TextStyle::Body);
+        ui.painter().galley(egui::pos2(rect.left() + text_w + 6.0, rect.center().y - ig.size().y / 2.0), ig, color);
+    }
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 fn setting_row(ui: &mut egui::Ui, label: &str, tooltip: &str, control: impl FnOnce(&mut egui::Ui)) {
     let r = ui
         .horizontal(|ui| {
-            ui.set_min_height(32.0);
+            ui.set_min_height(36.0);
             ui.label(label);
-            ui.with_layout(Layout::right_to_left(Align::Center), control);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                control(ui);
+            });
         })
         .response;
     r.on_hover_text(plain(tooltip));
 }
 
-fn path_row(ui: &mut egui::Ui, label: &str, tooltip: &str, tr: &Tr, value: &mut String, file: &str) {
+fn path_row(ui: &mut egui::Ui, p: &Pal, label: &str, tooltip: &str, tr: &Tr, value: &mut String, file: &str) {
     setting_row(ui, label, tooltip, |ui| {
-        let browse = ui.add(egui::Button::new(icon(I_FOLDER, 16.0, ui.visuals().text_color())).frame(false)).on_hover_text(tr.browse_tooltip);
-        let reset = ui.add_enabled(!value.is_empty(), egui::Button::new(icon(I_CLOSE, 16.0, ui.visuals().text_color())).frame(false)).on_hover_text(tr.reset_tooltip);
-        ui.add(egui::TextEdit::singleline(value).desired_width(110.0).font(FontId::proportional(13.0)).hint_text(tr.auto_detect));
+        let browse = fluent::icon_button(ui, p, I_FOLDER, Vec2::splat(32.0), true).on_hover_text(tr.browse_tooltip);
+        let reset = fluent::icon_button(ui, p, I_CLOSE, Vec2::splat(32.0), !value.is_empty()).on_hover_text(tr.reset_tooltip);
+        fluent::line_edit(ui, p, value, 130.0, Some(tr.auto_detect));
         if reset.clicked() {
             value.clear();
         }
@@ -1914,44 +1827,6 @@ fn path_row(ui: &mut egui::Ui, label: &str, tooltip: &str, tr: &Tr, value: &mut 
             }
         }
     });
-}
-
-/// Interruttore in stile Material (il ToggleSwitch dell'originale).
-fn toggle(ui: &mut egui::Ui, on: &mut bool) {
-    let size = Vec2::new(36.0, 18.0);
-    let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
-    if resp.clicked() {
-        *on = !*on;
-        resp.mark_changed();
-    }
-    let t = ui.ctx().animate_bool_responsive(resp.id, *on);
-    let track = if *on { ACCENT.gamma_multiply(0.5) } else { Color32::from_gray(0x9E) };
-    ui.painter().rect_filled(rect.shrink2(Vec2::new(0.0, 3.0)), 6.0, track);
-    let x = egui::lerp(rect.left() + 9.0..=rect.right() - 9.0, t);
-    let knob = if *on { ACCENT } else { Color32::from_gray(0xF1) };
-    ui.painter().circle(egui::pos2(x, rect.center().y), 9.0, knob, Stroke::new(1.0_f32, Color32::from_black_alpha(40)));
-}
-
-/// Cerchio di avanzamento (indeterminato se `fraction` è `None`).
-fn circular_progress(ui: &mut egui::Ui, fraction: Option<f32>, time: f32, track: Color32) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
-    let c = rect.center();
-    let r = 8.0;
-    ui.painter().circle_stroke(c, r, Stroke::new(2.5_f32, track));
-    let (start, sweep) = match fraction {
-        Some(f) if f > 0.0 => (-std::f32::consts::FRAC_PI_2, f * std::f32::consts::TAU),
-        _ => {
-            ui.ctx().request_repaint();
-            (time * 5.0, std::f32::consts::FRAC_PI_2 * 1.2)
-        }
-    };
-    let n = 32;
-    let pts: Vec<egui::Pos2> = (0..=n).map(|i| {
-        let a = start + sweep * i as f32 / n as f32;
-        c + Vec2::new(a.cos(), a.sin()) * r
-    }).collect();
-    ui.painter().add(Shape::line(pts, Stroke::new(2.5_f32, ACCENT)));
-    ui.add_space(4.0);
 }
 
 fn show_in_explorer(path: &PathBuf) {
@@ -1975,6 +1850,15 @@ fn open_file(path: &PathBuf) {
 }
 
 impl eframe::App for App {
+    /// Sopra Mica lo sfondo resta trasparente; altrimenti è `SolidBackgroundFillColorBase`.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if self.mica {
+            [0.0; 4]
+        } else {
+            visuals.panel_fill.to_normalized_gamma_f32()
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if !self.started {
             self.started = true;
@@ -1998,13 +1882,21 @@ impl eframe::App for App {
             });
             self.applied_theme = Some(self.settings.theme);
         }
+        // Barra del titolo chiara/scura insieme al tema dell'app.
+        let dark = ctx.style().visuals.dark_mode;
+        if self.applied_dark != Some(dark) {
+            if let Some(h) = self.hwnd {
+                fluent::apply_window_style(h, dark, false);
+            }
+            self.applied_dark = Some(dark);
+        }
         self.handle_events(ctx);
         self.schedule(ctx);
-        let p = pal(ctx.style().visuals.dark_mode);
+        let p = fluent::pal(dark, &self.accent, self.mica);
         self.header(ctx, &p);
         self.body(ctx, &p);
         self.dialogs(ctx, &p);
-        self.snackbar(ctx);
+        self.snackbar(ctx, &p);
         if self.downloads.iter().any(|d| d.launched && d.status() == Status::Started) {
             ctx.request_repaint_after(Duration::from_millis(200));
         }
